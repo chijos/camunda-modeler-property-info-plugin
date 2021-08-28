@@ -5,7 +5,7 @@ var _ = require('lodash');
 var elementOverlays = [];
 var overlaysVisible = true;
 
-function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions) {
+function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions, selection, propertiesPanel) {
 
     eventBus.on('shape.changed', function (event) {
         _.defer(function () {
@@ -26,7 +26,6 @@ function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions) 
             changeShape(event);
         });
     });
-
 
     editorActions.register({
         togglePropertyOverlays: function () {
@@ -255,6 +254,58 @@ function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions) 
         }
 
         addOverlays(badges, element);
+
+        // add click handlers to the badges that change selection to the parent element
+        var badgeElements = Array.from(document.getElementsByClassName('badge'));
+        badgeElements.forEach(badgeElement => {
+            var elementId = badgeElement.getAttribute('data-element-id');
+            var element = elementRegistry.get(elementId);
+            var badgeType = badgeElement.getAttribute('data-badge');
+            var badgeLocation = badgeElement.getAttribute('data-badge-location');
+            badgeElement.addEventListener('click', () => {
+                activatePropertiesPanelTab(badgeType, badgeLocation, element);
+            });
+        });
+    }
+
+    function activatePropertiesPanelTab(badgeType, badgeLocation, element) {
+        ensurePropertiesPanelIsOpen();
+
+        propertiesPanel.activateTab(getTabNameForBadge(badgeType));
+
+        selection.select(element);
+    }
+
+    function getTabNameForBadge(badgeType) {
+        switch(badgeType) {
+            case 'L':
+                return 'listeners';
+            case 'T':
+                return 'listeners';
+            case 'E':
+                return 'extensionElements';
+            case 'I':
+                return 'input-output';
+            case 'V':
+                return 'input-output';
+            case 'F':
+                return 'field-injections';
+            default:
+                return 'general';
+        }
+    }
+
+    function ensurePropertiesPanelIsOpen() {
+        var panels = Array.from(document.getElementsByClassName('properties'));
+        if(panels.length > 1) {
+            console.error('Found more than one panel with the class "properties".');
+            return;
+        }
+        var propertiesPanel = panels[0];
+        if(!propertiesPanel.classList.contains('open')) {
+            propertiesPanel.classList.add('open');
+            propertiesPanel.style.width = '500px';
+        }
     }
 
     function addOverlays(badgeList, element) {
@@ -276,25 +327,34 @@ function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions) 
             var overlayObject = sortedBadgeList[overlayCounter];
 
             if (overlayObject.badgeLocation === 'left') {
-                badges.push(overlays.add(element, 'badge', {
+                var badge = overlays.add(element, 'badge', {
                     position: {
                         bottom: 0,
                         left: leftCounter
                     },
-                    html: '<div class="badge ' + overlayObject.badgeBackground + '" data-badge="' + overlayObject.badgeType + '"></div>'
-                }));
+                    html: '<div class="badge ' + overlayObject.badgeBackground + '" ' +
+                               'data-element-id="' + element.id + '" ' +
+                               'data-badge-location="' + overlayObject.badgeLocation + '" ' +
+                               'data-badge="' + overlayObject.badgeType + '">' + 
+                          '</div>'
+                });
+                badges.push(badge);
                 leftCounter = leftCounter + 16;
             } else {
-                badges.push(overlays.add(element, 'badge', {
+                var badge = overlays.add(element, 'badge', {
                     position: {
                         bottom: 0,
                         right: rightCounter
                     },
-                    html: '<div class="badge ' + overlayObject.badgeBackground + '" data-badge="' + overlayObject.badgeType + '"></div>'
-                }));
+                    html: '<div class="badge ' + overlayObject.badgeBackground + '" ' + 
+                               'data-element-id="' + element.id + '" ' +
+                               'data-badge-location="' + overlayObject.badgeLocation + '" ' +
+                               'data-badge="' + overlayObject.badgeType + '">' + 
+                          '</div>'
+                });
+                badges.push(badge);
                 rightCounter = rightCounter + 16;
             }
-
         }
 
         pushArray(elementOverlays[element.id],badges);
@@ -319,7 +379,14 @@ function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions) 
 
 }
 
-PropertyInfoPlugin.$inject = ['eventBus', 'overlays', 'elementRegistry', 'editorActions'];
+PropertyInfoPlugin.$inject = [
+    'eventBus', 
+    'overlays', 
+    'elementRegistry', 
+    'editorActions', 
+    'selection', 
+    'propertiesPanel'
+];
 
 module.exports = {
     __init__: ['clientPlugin'],
