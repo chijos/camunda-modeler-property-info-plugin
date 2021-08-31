@@ -269,11 +269,47 @@ function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions, 
     }
 
     function activatePropertiesPanelTab(badgeType, badgeLocation, element) {
+        // select the element so the properties panel updates to show the correct values
+        selection.select(element);
+
+        // for listeners, try to select the appropriate option so the details are populated
+        selectSpecificListener(badgeType, badgeLocation);
+
+        // finally show the properties panel - can't do this earlier because the listener-details and fields 
+        //  do not unhide correctly if the panel was already open
         ensurePropertiesPanelIsOpen();
 
+        // switch to the tab matching the badge type 
         propertiesPanel.activateTab(getTabNameForBadge(badgeType));
+    }
 
-        selection.select(element);
+    function selectSpecificListener(badgeType, badgeLocation) {
+        if (badgeType == 'L') {
+            var executionListeners = document.getElementById('cam-extensionElements-executionListeners');
+            executionListeners.selectedIndex = -1;
+            var options = Array.from(executionListeners.getElementsByTagName('option'));
+            if (badgeLocation == 'left') {
+                var dataIndex = options.find(o => o.innerText.startsWith('start')).getAttribute('data-index');
+                executionListeners.selectedIndex = dataIndex;
+            }
+            else {
+                var dataIndex = options.find(o => !o.innerText.startsWith('start')).getAttribute('data-index');
+                executionListeners.selectedIndex = dataIndex;
+            }
+        }
+        else if (badgeType == 'T') {
+            var taskListeners = document.getElementById('cam-extensionElements-taskListeners');
+            taskListeners.selectedIndex = -1;
+            var options = Array.from(taskListeners.getElementsByTagName('option'));
+            if (badgeLocation == 'left') {
+                var dataIndex = options.find(o => o.innerText.startsWith('create') || o.innerText.startsWith('assignment')).getAttribute('data-index');
+                taskListeners.selectedIndex = dataIndex;
+            }
+            else {
+                var dataIndex = options.find(o => !o.innerText.startsWith('create') && !o.innerText.startsWith('assignment')).getAttribute('data-index');
+                taskListeners.selectedIndex = dataIndex;
+            }
+        }
     }
 
     function getTabNameForBadge(badgeType) {
