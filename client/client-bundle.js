@@ -1,4 +1,4 @@
-(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+(function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
 'use strict';
 
 var _ = require('lodash');
@@ -6,7 +6,7 @@ var _ = require('lodash');
 var elementOverlays = [];
 var overlaysVisible = true;
 
-function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions) {
+function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions, selection, propertiesPanel) {
 
     eventBus.on('shape.changed', function (event) {
         _.defer(function () {
@@ -27,7 +27,6 @@ function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions) 
             changeShape(event);
         });
     });
-
 
     editorActions.register({
         togglePropertyOverlays: function () {
@@ -256,6 +255,94 @@ function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions) 
         }
 
         addOverlays(badges, element);
+
+        // add click handlers to the badges that change selection to the parent element
+        var badgeElements = Array.from(document.getElementsByClassName('badge'));
+        badgeElements.forEach(badgeElement => {
+            var elementId = badgeElement.getAttribute('data-element-id');
+            var element = elementRegistry.get(elementId);
+            var badgeType = badgeElement.getAttribute('data-badge');
+            var badgeLocation = badgeElement.getAttribute('data-badge-location');
+            badgeElement.addEventListener('click', () => {
+                activatePropertiesPanelTab(badgeType, badgeLocation, element);
+            });
+        });
+    }
+
+    function activatePropertiesPanelTab(badgeType, badgeLocation, element) {
+        // select the element so the properties panel updates to show the correct values
+        selection.select(element);
+
+        // for listeners, try to select the appropriate option so the details are populated
+        selectSpecificListener(badgeType, badgeLocation);
+
+        // finally show the properties panel - can't do this earlier because the listener-details and fields 
+        //  do not unhide correctly if the panel was already open
+        ensurePropertiesPanelIsOpen();
+
+        // switch to the tab matching the badge type 
+        propertiesPanel.activateTab(getTabNameForBadge(badgeType));
+    }
+
+    function selectSpecificListener(badgeType, badgeLocation) {
+        if (badgeType == 'L') {
+            var executionListeners = document.getElementById('cam-extensionElements-executionListeners');
+            executionListeners.selectedIndex = -1;
+            var options = Array.from(executionListeners.getElementsByTagName('option'));
+            if (badgeLocation == 'left') {
+                var dataIndex = options.find(o => o.innerText.startsWith('start')).getAttribute('data-index');
+                executionListeners.selectedIndex = dataIndex;
+            }
+            else {
+                var dataIndex = options.find(o => !o.innerText.startsWith('start')).getAttribute('data-index');
+                executionListeners.selectedIndex = dataIndex;
+            }
+        }
+        else if (badgeType == 'T') {
+            var taskListeners = document.getElementById('cam-extensionElements-taskListeners');
+            taskListeners.selectedIndex = -1;
+            var options = Array.from(taskListeners.getElementsByTagName('option'));
+            if (badgeLocation == 'left') {
+                var dataIndex = options.find(o => o.innerText.startsWith('create') || o.innerText.startsWith('assignment')).getAttribute('data-index');
+                taskListeners.selectedIndex = dataIndex;
+            }
+            else {
+                var dataIndex = options.find(o => !o.innerText.startsWith('create') && !o.innerText.startsWith('assignment')).getAttribute('data-index');
+                taskListeners.selectedIndex = dataIndex;
+            }
+        }
+    }
+
+    function getTabNameForBadge(badgeType) {
+        switch(badgeType) {
+            case 'L':
+                return 'listeners';
+            case 'T':
+                return 'listeners';
+            case 'E':
+                return 'extensionElements';
+            case 'I':
+                return 'input-output';
+            case 'V':
+                return 'input-output';
+            case 'F':
+                return 'field-injections';
+            default:
+                return 'general';
+        }
+    }
+
+    function ensurePropertiesPanelIsOpen() {
+        var panels = Array.from(document.getElementsByClassName('properties'));
+        if(panels.length > 1) {
+            console.error('Found more than one panel with the class "properties".');
+            return;
+        }
+        var propertiesPanel = panels[0];
+        if(!propertiesPanel.classList.contains('open')) {
+            propertiesPanel.classList.add('open');
+            propertiesPanel.style.width = '500px';
+        }
     }
 
     function addOverlays(badgeList, element) {
@@ -277,25 +364,34 @@ function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions) 
             var overlayObject = sortedBadgeList[overlayCounter];
 
             if (overlayObject.badgeLocation === 'left') {
-                badges.push(overlays.add(element, 'badge', {
+                var badge = overlays.add(element, 'badge', {
                     position: {
                         bottom: 0,
                         left: leftCounter
                     },
-                    html: '<div class="badge ' + overlayObject.badgeBackground + '" data-badge="' + overlayObject.badgeType + '"></div>'
-                }));
+                    html: '<div class="badge ' + overlayObject.badgeBackground + '" ' +
+                               'data-element-id="' + element.id + '" ' +
+                               'data-badge-location="' + overlayObject.badgeLocation + '" ' +
+                               'data-badge="' + overlayObject.badgeType + '">' + 
+                          '</div>'
+                });
+                badges.push(badge);
                 leftCounter = leftCounter + 16;
             } else {
-                badges.push(overlays.add(element, 'badge', {
+                var badge = overlays.add(element, 'badge', {
                     position: {
                         bottom: 0,
                         right: rightCounter
                     },
-                    html: '<div class="badge ' + overlayObject.badgeBackground + '" data-badge="' + overlayObject.badgeType + '"></div>'
-                }));
+                    html: '<div class="badge ' + overlayObject.badgeBackground + '" ' + 
+                               'data-element-id="' + element.id + '" ' +
+                               'data-badge-location="' + overlayObject.badgeLocation + '" ' +
+                               'data-badge="' + overlayObject.badgeType + '">' + 
+                          '</div>'
+                });
+                badges.push(badge);
                 rightCounter = rightCounter + 16;
             }
-
         }
 
         pushArray(elementOverlays[element.id],badges);
@@ -320,7 +416,14 @@ function PropertyInfoPlugin(eventBus, overlays, elementRegistry, editorActions) 
 
 }
 
-PropertyInfoPlugin.$inject = ['eventBus', 'overlays', 'elementRegistry', 'editorActions'];
+PropertyInfoPlugin.$inject = [
+    'eventBus', 
+    'overlays', 
+    'elementRegistry', 
+    'editorActions', 
+    'selection', 
+    'propertiesPanel'
+];
 
 module.exports = {
     __init__: ['clientPlugin'],
@@ -377,7 +480,7 @@ function registerBpmnJSPlugin(plugin) {
 module.exports.registerBpmnJSPlugin = registerBpmnJSPlugin;
 
 },{}],4:[function(require,module,exports){
-(function (global){
+(function (global){(function (){
 /**
  * @license
  * lodash 3.10.1 (Custom Build) <https://lodash.com/>
@@ -12730,5 +12833,5 @@ module.exports.registerBpmnJSPlugin = registerBpmnJSPlugin;
   }
 }.call(this));
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+}).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{}]},{},[2]);
